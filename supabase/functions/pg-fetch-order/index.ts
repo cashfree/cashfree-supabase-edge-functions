@@ -15,9 +15,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Dynamic import of Cashfree to avoid type issues in Deno
-    const { Cashfree } = await import('cashfree-pg');
-
     // Get environment variables
     const clientId = Deno.env.get('CASHFREE_CLIENT_ID');
     const clientSecret = Deno.env.get('CASHFREE_CLIENT_SECRET');
@@ -27,26 +24,10 @@ serve(async (req: Request) => {
       throw new Error('Missing Cashfree credentials in environment variables');
     }
 
-    // Initialize Cashfree SDK - try both v5+ and v4 patterns
-    let cashfree: unknown;
-    try {
-      // Try v5+ constructor pattern with proper enum handling
-      const env = environment === 'PRODUCTION' ? 'PRODUCTION' : 'SANDBOX';
-      cashfree = new Cashfree(env as never, clientId, clientSecret);
-    } catch {
-      // Fallback to v4 global configuration pattern
-      const CashfreeConfig = Cashfree as unknown as {
-        XClientId: string;
-        XClientSecret: string;
-        XEnvironment: string;
-      };
-      CashfreeConfig.XClientId = clientId;
-      CashfreeConfig.XClientSecret = clientSecret;
-      CashfreeConfig.XEnvironment = environment === 'PRODUCTION'
-        ? 'PRODUCTION'
-        : 'SANDBOX';
-      cashfree = Cashfree;
-    }
+    // Set Cashfree API base URL based on environment
+    const baseUrl = environment === 'PRODUCTION'
+      ? 'https://api.cashfree.com'
+      : 'https://sandbox.cashfree.com';
 
     if (req.method === 'GET') {
       // Get order_id from URL path or query parameters
@@ -84,27 +65,32 @@ serve(async (req: Request) => {
         );
       }
 
-      // Fetch order using Cashfree SDK - try both v5+ and v4 method patterns
-      let response: { data?: unknown };
-      try {
-        // Try v5+ instance method
-        response = await (cashfree as unknown as {
-          PGFetchOrder: (orderId: string) => Promise<{ data?: unknown }>;
-        }).PGFetchOrder(orderId);
-      } catch {
-        // Try v4 static method with API version
-        response = await (cashfree as unknown as {
-          PGFetchOrder: (
-            version: string,
-            orderId: string,
-          ) => Promise<{ data?: unknown }>;
-        }).PGFetchOrder('2023-08-01', orderId);
+      // Fetch order using Cashfree API direct HTTP call
+      const apiUrl = `${baseUrl}/pg/orders/${orderId}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'x-client-id': clientId,
+          'x-client-secret': clientSecret,
+          'x-api-version': '2023-08-01',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Cashfree API error: ${response.status} - ${errorData.message || 'Unknown error'}`
+        );
       }
+
+      const orderData = await response.json();
 
       return new Response(
         JSON.stringify({
           success: true,
-          data: response.data,
+          data: orderData,
           message: 'Order fetched successfully',
         }),
         {
