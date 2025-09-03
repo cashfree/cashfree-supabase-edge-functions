@@ -97,19 +97,17 @@ serve(async (req: Request) => {
       let response: { data?: unknown };
       try {
         // Try v5+ instance method
-        response =
-          await (cashfree as unknown as {
-            PGCreateOrder: (req: unknown) => Promise<{ data?: unknown }>;
-          }).PGCreateOrder(orderRequest);
+        response = await (cashfree as unknown as {
+          PGCreateOrder: (req: unknown) => Promise<{ data?: unknown }>;
+        }).PGCreateOrder(orderRequest);
       } catch {
         // Try v4 static method with API version
-        response =
-          await (cashfree as unknown as {
-            PGCreateOrder: (
-              version: string,
-              req: unknown,
-            ) => Promise<{ data?: unknown }>;
-          }).PGCreateOrder('2023-08-01', orderRequest);
+        response = await (cashfree as unknown as {
+          PGCreateOrder: (
+            version: string,
+            req: unknown,
+          ) => Promise<{ data?: unknown }>;
+        }).PGCreateOrder('2023-08-01', orderRequest);
       }
 
       return new Response(
@@ -142,19 +140,17 @@ serve(async (req: Request) => {
       let response: { data?: unknown };
       try {
         // Try v5+ instance method
-        response =
-          await (cashfree as unknown as {
-            PGFetchOrder: (orderId: string) => Promise<{ data?: unknown }>;
-          }).PGFetchOrder(orderId);
+        response = await (cashfree as unknown as {
+          PGFetchOrder: (orderId: string) => Promise<{ data?: unknown }>;
+        }).PGFetchOrder(orderId);
       } catch {
         // Try v4 static method with API version
-        response =
-          await (cashfree as unknown as {
-            PGFetchOrder: (
-              version: string,
-              orderId: string,
-            ) => Promise<{ data?: unknown }>;
-          }).PGFetchOrder('2023-08-01', orderId);
+        response = await (cashfree as unknown as {
+          PGFetchOrder: (
+            version: string,
+            orderId: string,
+          ) => Promise<{ data?: unknown }>;
+        }).PGFetchOrder('2023-08-01', orderId);
       }
 
       return new Response(

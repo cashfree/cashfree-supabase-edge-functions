@@ -52,13 +52,15 @@ serve(async (req: Request) => {
       // Get order_id from URL path or query parameters
       const url = new URL(req.url);
       const pathParts = url.pathname.split('/').filter(Boolean); // Remove empty strings
-      
+
       // Expected path: /functions/v1/pg-order-fetch-payments/order_123
       // pathParts: ['functions', 'v1', 'pg-order-fetch-payments', 'order_123']
       let orderId = '';
-      
+
       // Look for order_id in path (should be after 'pg-order-fetch-payments')
-      const functionIndex = pathParts.findIndex(part => part === 'pg-order-fetch-payments');
+      const functionIndex = pathParts.findIndex((part) =>
+        part === 'pg-order-fetch-payments'
+      );
       if (functionIndex !== -1 && pathParts[functionIndex + 1]) {
         orderId = pathParts[functionIndex + 1];
       }
@@ -86,21 +88,19 @@ serve(async (req: Request) => {
       let response: { data?: unknown };
       try {
         // Try v5+ instance method
-        response =
-          await (cashfree as unknown as {
-            PGOrderFetchPayments: (
-              orderId: string,
-            ) => Promise<{ data?: unknown }>;
-          }).PGOrderFetchPayments(orderId);
+        response = await (cashfree as unknown as {
+          PGOrderFetchPayments: (
+            orderId: string,
+          ) => Promise<{ data?: unknown }>;
+        }).PGOrderFetchPayments(orderId);
       } catch {
         // Try v4 static method with API version
-        response =
-          await (cashfree as unknown as {
-            PGOrderFetchPayments: (
-              version: string,
-              orderId: string,
-            ) => Promise<{ data?: unknown }>;
-          }).PGOrderFetchPayments('2023-08-01', orderId);
+        response = await (cashfree as unknown as {
+          PGOrderFetchPayments: (
+            version: string,
+            orderId: string,
+          ) => Promise<{ data?: unknown }>;
+        }).PGOrderFetchPayments('2023-08-01', orderId);
       }
 
       return new Response(

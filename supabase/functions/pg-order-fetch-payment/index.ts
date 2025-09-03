@@ -59,7 +59,9 @@ serve(async (req: Request) => {
       let cfPaymentId = '';
 
       // Look for parameters after 'pg-order-fetch-payment'
-      const functionIndex = pathParts.findIndex(part => part === 'pg-order-fetch-payment');
+      const functionIndex = pathParts.findIndex((part) =>
+        part === 'pg-order-fetch-payment'
+      );
       if (functionIndex !== -1) {
         orderId = pathParts[functionIndex + 1] || '';
         cfPaymentId = pathParts[functionIndex + 2] || '';
