@@ -6,8 +6,10 @@ This repository contains Supabase Edge Functions for Cashfree integration.
 
 - `pg-create-order`: Cashfree Payment Gateway integration for creating and
   fetching orders
-- `pg-fetch-order`: Cashfree Payment Gateway integration for fetching order details by order ID
-- `pg-order-fetch-payment`: Fetch specific payment details by order ID and payment ID
+- `pg-fetch-order`: Cashfree Payment Gateway integration for fetching order
+  details by order ID
+- `pg-order-fetch-payment`: Fetch specific payment details by order ID and
+  payment ID
 - `pg-order-fetch-payments`: Fetch all payment details for a specific order
 
 ## Local Development
@@ -56,6 +58,7 @@ supabase functions deploy --project-ref your-project-ref
 You can test deployed functions using cURL:
 
 ### Create Order
+
 ```bash
 curl -i --location --request POST 'https://your-project-ref.supabase.co/functions/v1/pg-create-order' \
 --header 'Content-Type: application/json' \
@@ -63,16 +66,19 @@ curl -i --location --request POST 'https://your-project-ref.supabase.co/function
 ```
 
 ### Fetch Order
+
 ```bash
 curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-fetch-order/test_123'
 ```
 
 ### Fetch All Payments for Order
+
 ```bash
 curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-order-fetch-payments/test_123'
 ```
 
 ### Fetch Specific Payment
+
 ```bash
 curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-order-fetch-payment/test_123/payment_456'
 ```

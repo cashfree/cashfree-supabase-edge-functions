@@ -1,6 +1,7 @@
 # Cashfree Payment Gateway - Fetch Order Edge Function
 
-This Supabase Edge Function integrates with Cashfree Payment Gateway to fetch payment order details using their SDK.
+This Supabase Edge Function integrates with Cashfree Payment Gateway to fetch
+payment order details using their SDK.
 
 ## Features
 
@@ -23,17 +24,21 @@ supabase secrets set CASHFREE_ENVIRONMENT=SANDBOX  # or PRODUCTION
 ## API Endpoints
 
 ### GET /functions/v1/pg-fetch-order/{order_id}
+
 ### GET /functions/v1/pg-fetch-order?order_id={order_id}
 
 Fetches details of an existing payment order.
 
 **Path Parameter:**
+
 - `order_id`: The unique identifier of the order to fetch
 
 **Query Parameter (alternative):**
+
 - `order_id`: The unique identifier of the order to fetch
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -82,6 +87,7 @@ Fetches details of an existing payment order.
 ## Order Status Values
 
 The `order_status` field can have the following values:
+
 - `ACTIVE`: Order is created and awaiting payment
 - `PAID`: Payment has been completed successfully
 - `EXPIRED`: Order has expired
@@ -96,7 +102,7 @@ The `order_status` field can have the following values:
 // Fetch Order using path parameter
 const fetchOrderByPath = async (orderId) => {
   const response = await fetch(
-    `https://your-project.supabase.co/functions/v1/pg-fetch-order/${orderId}`
+    `https://your-project.supabase.co/functions/v1/pg-fetch-order/${orderId}`,
   );
   const data = await response.json();
   return data;
@@ -105,7 +111,7 @@ const fetchOrderByPath = async (orderId) => {
 // Fetch Order using query parameter
 const fetchOrderByQuery = async (orderId) => {
   const response = await fetch(
-    `https://your-project.supabase.co/functions/v1/pg-fetch-order?order_id=${orderId}`
+    `https://your-project.supabase.co/functions/v1/pg-fetch-order?order_id=${orderId}`,
   );
   const data = await response.json();
   return data;
@@ -129,7 +135,7 @@ try {
 ### React Hook Example
 
 ```javascript
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 const useOrderData = (orderId) => {
   const [orderData, setOrderData] = useState(null);
@@ -142,13 +148,13 @@ const useOrderData = (orderId) => {
     const fetchOrder = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
         const response = await fetch(
-          `https://your-project.supabase.co/functions/v1/pg-fetch-order/${orderId}`
+          `https://your-project.supabase.co/functions/v1/pg-fetch-order/${orderId}`,
         );
         const data = await response.json();
-        
+
         if (data.success) {
           setOrderData(data.data);
         } else {
@@ -195,6 +201,7 @@ supabase functions deploy pg-fetch-order --import-map ./supabase/functions/impor
 ## Error Handling
 
 The function returns appropriate HTTP status codes:
+
 - `200`: Success
 - `400`: Bad Request (missing order_id)
 - `404`: Order not found
@@ -202,6 +209,7 @@ The function returns appropriate HTTP status codes:
 - `500`: Internal Server Error
 
 Error responses include:
+
 ```json
 {
   "success": false,
@@ -240,16 +248,18 @@ const orderResponse = await fetch('/functions/v1/pg-create-order', {
     order_id: 'order_123',
     customer_details: {
       customer_id: 'cust_123',
-      customer_phone: '9999999999'
-    }
-  })
+      customer_phone: '9999999999',
+    },
+  }),
 });
 
 const order = await orderResponse.json();
 
 // Then fetch the order details
 if (order.success) {
-  const orderDetails = await fetch(`/functions/v1/pg-fetch-order/${order.data.order_id}`);
+  const orderDetails = await fetch(
+    `/functions/v1/pg-fetch-order/${order.data.order_id}`,
+  );
   const details = await orderDetails.json();
   console.log('Order created and fetched:', details.data);
 }

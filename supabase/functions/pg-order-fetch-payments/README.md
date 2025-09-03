@@ -1,6 +1,7 @@
 # Cashfree Payment Gateway - Fetch All Payments Edge Function
 
-This Supabase Edge Function integrates with Cashfree Payment Gateway to fetch all payment details for a specific order using their SDK.
+This Supabase Edge Function integrates with Cashfree Payment Gateway to fetch
+all payment details for a specific order using their SDK.
 
 ## Features
 
@@ -23,17 +24,21 @@ supabase secrets set CASHFREE_ENVIRONMENT=SANDBOX  # or PRODUCTION
 ## API Endpoints
 
 ### GET /functions/v1/pg-order-fetch-payments/{order_id}
+
 ### GET /functions/v1/pg-order-fetch-payments?order_id={order_id}
 
 Fetches all payment details for a specific order.
 
 **Path Parameter:**
+
 - `order_id`: The unique identifier of the order
 
 **Query Parameter (alternative):**
+
 - `order_id`: The unique identifier of the order
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -108,6 +113,7 @@ Fetches all payment details for a specific order.
 ## Payment Status Values
 
 Each payment in the response can have the following `payment_status` values:
+
 - `SUCCESS`: Payment completed successfully
 - `FAILED`: Payment failed
 - `PENDING`: Payment is being processed
@@ -117,6 +123,7 @@ Each payment in the response can have the following `payment_status` values:
 ## Payment Groups
 
 The `payment_group` field indicates the payment method category:
+
 - `upi`: UPI payments
 - `credit_card`: Credit card payments
 - `debit_card`: Debit card payments
@@ -133,7 +140,7 @@ The `payment_group` field indicates the payment method category:
 // Fetch all payments using path parameter
 const fetchPaymentsByPath = async (orderId) => {
   const response = await fetch(
-    `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`
+    `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`,
   );
   const data = await response.json();
   return data;
@@ -142,7 +149,7 @@ const fetchPaymentsByPath = async (orderId) => {
 // Fetch all payments using query parameter
 const fetchPaymentsByQuery = async (orderId) => {
   const response = await fetch(
-    `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments?order_id=${orderId}`
+    `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments?order_id=${orderId}`,
   );
   const data = await response.json();
   return data;
@@ -153,23 +160,32 @@ try {
   const paymentsData = await fetchPaymentsByPath('order_123');
   if (paymentsData.success) {
     const payments = paymentsData.data;
-    
+
     // Analyze payment attempts
-    const successfulPayments = payments.filter(p => p.payment_status === 'SUCCESS');
-    const failedPayments = payments.filter(p => p.payment_status === 'FAILED');
-    const pendingPayments = payments.filter(p => p.payment_status === 'PENDING');
-    
+    const successfulPayments = payments.filter((p) =>
+      p.payment_status === 'SUCCESS'
+    );
+    const failedPayments = payments.filter((p) =>
+      p.payment_status === 'FAILED'
+    );
+    const pendingPayments = payments.filter((p) =>
+      p.payment_status === 'PENDING'
+    );
+
     console.log(`Total payment attempts: ${payments.length}`);
     console.log(`Successful: ${successfulPayments.length}`);
     console.log(`Failed: ${failedPayments.length}`);
     console.log(`Pending: ${pendingPayments.length}`);
-    
+
     // Get payment methods used
-    const paymentMethods = payments.map(p => p.payment_group);
+    const paymentMethods = payments.map((p) => p.payment_group);
     console.log('Payment methods used:', [...new Set(paymentMethods)]);
-    
+
     // Calculate total successful amount
-    const totalSuccessAmount = successfulPayments.reduce((sum, p) => sum + p.payment_amount, 0);
+    const totalSuccessAmount = successfulPayments.reduce(
+      (sum, p) => sum + p.payment_amount,
+      0,
+    );
     console.log(`Total successful payment amount: ₹${totalSuccessAmount}`);
   } else {
     console.error('Error:', paymentsData.error);
@@ -182,7 +198,7 @@ try {
 ### React Component for Payment History
 
 ```javascript
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 const PaymentHistory = ({ orderId }) => {
   const [payments, setPayments] = useState([]);
@@ -195,13 +211,13 @@ const PaymentHistory = ({ orderId }) => {
     const fetchPayments = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
         const response = await fetch(
-          `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`
+          `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`,
         );
         const data = await response.json();
-        
+
         if (data.success) {
           setPayments(data.data);
         } else {
@@ -219,10 +235,14 @@ const PaymentHistory = ({ orderId }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'SUCCESS': return 'green';
-      case 'FAILED': return 'red';
-      case 'PENDING': return 'orange';
-      default: return 'gray';
+      case 'SUCCESS':
+        return 'green';
+      case 'FAILED':
+        return 'red';
+      case 'PENDING':
+        return 'orange';
+      default:
+        return 'gray';
     }
   };
 
@@ -230,38 +250,51 @@ const PaymentHistory = ({ orderId }) => {
   if (error) return <div>Error: {error}</div>;
 
   return (
-    <div className="payment-history">
+    <div className='payment-history'>
       <h3>Payment History for Order: {orderId}</h3>
-      {payments.length === 0 ? (
-        <p>No payments found for this order.</p>
-      ) : (
-        <div className="payments-list">
-          {payments.map((payment, index) => (
-            <div key={payment.cf_payment_id} className="payment-item">
-              <div className="payment-header">
-                <span className="payment-id">Payment #{payment.cf_payment_id}</span>
-                <span 
-                  className="payment-status" 
-                  style={{ color: getStatusColor(payment.payment_status) }}
-                >
-                  {payment.payment_status}
-                </span>
+      {payments.length === 0
+        ? <p>No payments found for this order.</p>
+        : (
+          <div className='payments-list'>
+            {payments.map((payment, index) => (
+              <div key={payment.cf_payment_id} className='payment-item'>
+                <div className='payment-header'>
+                  <span className='payment-id'>
+                    Payment #{payment.cf_payment_id}
+                  </span>
+                  <span
+                    className='payment-status'
+                    style={{ color: getStatusColor(payment.payment_status) }}
+                  >
+                    {payment.payment_status}
+                  </span>
+                </div>
+                <div className='payment-details'>
+                  <p>
+                    <strong>Amount:</strong> ₹{payment.payment_amount}
+                  </p>
+                  <p>
+                    <strong>Method:</strong> {payment.payment_group}
+                  </p>
+                  <p>
+                    <strong>Time:</strong>{' '}
+                    {new Date(payment.payment_time).toLocaleString()}
+                  </p>
+                  {payment.bank_reference && (
+                    <p>
+                      <strong>Bank Reference:</strong> {payment.bank_reference}
+                    </p>
+                  )}
+                  {payment.payment_message && (
+                    <p>
+                      <strong>Message:</strong> {payment.payment_message}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="payment-details">
-                <p><strong>Amount:</strong> ₹{payment.payment_amount}</p>
-                <p><strong>Method:</strong> {payment.payment_group}</p>
-                <p><strong>Time:</strong> {new Date(payment.payment_time).toLocaleString()}</p>
-                {payment.bank_reference && (
-                  <p><strong>Bank Reference:</strong> {payment.bank_reference}</p>
-                )}
-                {payment.payment_message && (
-                  <p><strong>Message:</strong> {payment.payment_message}</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
     </div>
   );
 };
@@ -270,7 +303,7 @@ const PaymentHistory = ({ orderId }) => {
 ### Payment Analytics Hook
 
 ```javascript
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 const usePaymentAnalytics = (orderId) => {
   const [analytics, setAnalytics] = useState(null);
@@ -281,31 +314,44 @@ const usePaymentAnalytics = (orderId) => {
 
     const fetchAndAnalyze = async () => {
       setLoading(true);
-      
+
       try {
         const response = await fetch(
-          `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`
+          `https://your-project.supabase.co/functions/v1/pg-order-fetch-payments/${orderId}`,
         );
         const data = await response.json();
-        
+
         if (data.success) {
           const payments = data.data;
-          
+
           const analytics = {
             totalAttempts: payments.length,
-            successfulPayments: payments.filter(p => p.payment_status === 'SUCCESS').length,
-            failedPayments: payments.filter(p => p.payment_status === 'FAILED').length,
-            pendingPayments: payments.filter(p => p.payment_status === 'PENDING').length,
+            successfulPayments: payments.filter((p) =>
+              p.payment_status === 'SUCCESS'
+            ).length,
+            failedPayments: payments.filter((p) =>
+              p.payment_status === 'FAILED'
+            ).length,
+            pendingPayments: payments.filter((p) =>
+              p.payment_status === 'PENDING'
+            ).length,
             totalSuccessAmount: payments
-              .filter(p => p.payment_status === 'SUCCESS')
+              .filter((p) => p.payment_status === 'SUCCESS')
               .reduce((sum, p) => sum + p.payment_amount, 0),
-            paymentMethods: [...new Set(payments.map(p => p.payment_group))],
-            lastAttemptTime: payments.length > 0 ? 
-              Math.max(...payments.map(p => new Date(p.payment_time).getTime())) : null,
-            averageAttemptTime: payments.length > 0 ?
-              payments.map(p => new Date(p.payment_time).getTime()).reduce((a, b) => a + b, 0) / payments.length : null
+            paymentMethods: [...new Set(payments.map((p) => p.payment_group))],
+            lastAttemptTime: payments.length > 0
+              ? Math.max(
+                ...payments.map((p) => new Date(p.payment_time).getTime()),
+              )
+              : null,
+            averageAttemptTime: payments.length > 0
+              ? payments.map((p) => new Date(p.payment_time).getTime()).reduce(
+                (a, b) => a + b,
+                0,
+              ) / payments.length
+              : null,
           };
-          
+
           setAnalytics(analytics);
         }
       } catch (error) {
@@ -353,6 +399,7 @@ supabase functions deploy pg-order-fetch-payments --import-map ./supabase/functi
 ## Error Handling
 
 The function returns appropriate HTTP status codes:
+
 - `200`: Success
 - `400`: Bad Request (missing order_id)
 - `404`: Order not found
@@ -360,6 +407,7 @@ The function returns appropriate HTTP status codes:
 - `500`: Internal Server Error
 
 Error responses include:
+
 ```json
 {
   "success": false,
@@ -393,19 +441,26 @@ This function works great with other payment-related functions:
 
 ```javascript
 // Get all payments for an order
-const paymentsResponse = await fetch('/functions/v1/pg-order-fetch-payments/order_123');
+const paymentsResponse = await fetch(
+  '/functions/v1/pg-order-fetch-payments/order_123',
+);
 const paymentsData = await paymentsResponse.json();
 
 if (paymentsData.success) {
   // Get details for each successful payment
-  const successfulPayments = paymentsData.data.filter(p => p.payment_status === 'SUCCESS');
-  
+  const successfulPayments = paymentsData.data.filter((p) =>
+    p.payment_status === 'SUCCESS'
+  );
+
   for (const payment of successfulPayments) {
     const detailResponse = await fetch(
-      `/functions/v1/pg-order-fetch-payment/order_123/${payment.cf_payment_id}`
+      `/functions/v1/pg-order-fetch-payment/order_123/${payment.cf_payment_id}`,
     );
     const details = await detailResponse.json();
-    console.log(`Detailed info for payment ${payment.cf_payment_id}:`, details.data);
+    console.log(
+      `Detailed info for payment ${payment.cf_payment_id}:`,
+      details.data,
+    );
   }
 }
 
