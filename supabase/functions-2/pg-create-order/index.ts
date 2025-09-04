@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-console.log("🚀 pg-create-order function loaded at", new Date().toISOString());
 // CORS headers for handling cross-origin requests
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -8,31 +7,18 @@ const corsHeaders = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 serve(async (req) => {
-    console.log("=== pg-create-order function invoked ===");
-    console.log("Request method:", req.method);
-    console.log("Request URL:", req.url);
-    console.log("Request headers:", Object.fromEntries(req.headers.entries()));
     // Handle CORS preflight requests
     if (req.method === "OPTIONS") {
-        console.log("Handling CORS preflight request");
         return new Response("ok", {
             headers: corsHeaders,
         });
     }
     try {
-        console.log("=== Starting payment order creation ===");
         // Get environment variables with detailed logging
         const clientId = Deno.env.get("CASHFREE_CLIENT_ID");
         const clientSecret = Deno.env.get("CASHFREE_CLIENT_SECRET");
         const environment = Deno.env.get("CASHFREE_ENVIRONMENT") ||
             "PRODUCTION";
-        console.log("Environment check:", {
-            hasClientId: !!clientId,
-            clientIdLength: clientId?.length || 0,
-            hasClientSecret: !!clientSecret,
-            clientSecretLength: clientSecret?.length || 0,
-            environment: environment,
-        });
         if (!clientId || !clientSecret) {
             console.error("❌ Missing Cashfree credentials");
             return new Response(
@@ -55,14 +41,9 @@ serve(async (req) => {
             );
         }
         // Parse request body with error handling
-        console.log("📝 Parsing request body...");
         let requestBody;
         try {
             requestBody = await req.json();
-            console.log(
-                "✅ Request body parsed successfully:",
-                JSON.stringify(requestBody, null, 2),
-            );
         } catch (parseError) {
             console.error("❌ Failed to parse request body:", parseError);
             return new Response(
@@ -82,7 +63,6 @@ serve(async (req) => {
         }
         const { orderAmount, customerDetails } = requestBody;
         // Validate required fields
-        console.log("🔍 Validating required fields...");
         if (!orderAmount || !customerDetails) {
             console.error("❌ Missing required fields:", {
                 hasOrderAmount: !!orderAmount,
@@ -155,17 +135,10 @@ serve(async (req) => {
                 customer_name: customerDetails.customerName,
             },
         };
-        console.log("Creating payment order:", paymentPayload);
         // Determine API URL based on environment
         const apiUrl = environment === "PRODUCTION"
             ? "https://api.cashfree.com/pg/orders"
             : "https://sandbox.cashfree.com/pg/orders";
-        console.log("Making API request to Cashfree:", {
-            url: apiUrl,
-            environment,
-            hasClientId: !!clientId,
-            hasClientSecret: !!clientSecret,
-        });
         // Make request to Cashfree API
         const response = await fetch(apiUrl, {
             method: "POST",
@@ -177,14 +150,9 @@ serve(async (req) => {
             },
             body: JSON.stringify(paymentPayload),
         });
-        console.log("Cashfree API response status:", response.status);
-        console.log(
-            "Cashfree API response headers:",
-            Object.fromEntries(response.headers.entries()),
-        );
+
         let responseData;
         const responseText = await response.text();
-        console.log("Cashfree API raw response:", responseText);
         try {
             responseData = JSON.parse(responseText);
         } catch (parseError) {
@@ -196,10 +164,6 @@ serve(async (req) => {
                 `Invalid JSON response from Cashfree: ${responseText}`,
             );
         }
-        console.log(
-            "Cashfree API parsed response:",
-            JSON.stringify(responseData, null, 2),
-        );
         if (!response.ok) {
             console.error("Cashfree API error details:", {
                 status: response.status,
@@ -213,7 +177,6 @@ serve(async (req) => {
                 `HTTP ${response.status}: ${response.statusText}`;
             throw new Error(`Cashfree API Error: ${errorMessage}`);
         }
-        console.log("Payment order created successfully:", responseData);
         // Return success response
         return new Response(
             JSON.stringify({

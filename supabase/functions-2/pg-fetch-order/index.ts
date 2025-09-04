@@ -14,7 +14,6 @@ serve(async (req) => {
     });
   }
   try {
-    console.log("=== pg-fetch-order function started ===");
     // Get environment variables
     const clientId = Deno.env.get("CASHFREE_CLIENT_ID");
     const clientSecret = Deno.env.get("CASHFREE_CLIENT_SECRET");
@@ -25,7 +24,6 @@ serve(async (req) => {
     // Parse request body to get order ID
     const requestBody = await req.json();
     const { orderId } = requestBody;
-    console.log("Checking payment status for order:", orderId);
     if (!orderId) {
       throw new Error("Order ID is required");
     }
@@ -33,7 +31,6 @@ serve(async (req) => {
     const apiUrl = environment === "PRODUCTION"
       ? `https://api.cashfree.com/pg/orders/${orderId}`
       : `https://sandbox.cashfree.com/pg/orders/${orderId}`;
-    console.log("Fetching order from Cashfree:", apiUrl);
     // Make request to Cashfree API
     const response = await fetch(apiUrl, {
       method: "GET",
@@ -45,12 +42,10 @@ serve(async (req) => {
       },
     });
     const orderData = await response.json();
-    console.log("Cashfree order response:", orderData);
     if (!response.ok) {
       console.error("Cashfree API error:", orderData);
       throw new Error(orderData.message || "Failed to fetch order details");
     }
-    console.log("Order fetched successfully:", orderData);
     // Check if order is paid
     const isPaid = orderData.order_status === "PAID";
     const paymentStatus = orderData.order_status;
@@ -61,7 +56,6 @@ serve(async (req) => {
       paymentStatus,
       orderDetails: orderData,
     };
-    console.log("Returning order status:", responseData);
     return new Response(JSON.stringify(responseData), {
       headers: {
         ...corsHeaders,
