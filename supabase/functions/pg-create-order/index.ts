@@ -1,194 +1,222 @@
-import { serve } from 'http/server.ts';
-
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // CORS headers for handling cross-origin requests
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+        "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
-serve(async (req: Request) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  try {
-    // Dynamic import of Cashfree to avoid type issues in Deno
-    const { Cashfree } = await import('cashfree-pg');
-
-    // Get environment variables
-    const clientId = Deno.env.get('CASHFREE_CLIENT_ID');
-    const clientSecret = Deno.env.get('CASHFREE_CLIENT_SECRET');
-    const environment = Deno.env.get('CASHFREE_ENVIRONMENT') || 'SANDBOX';
-
-    if (!clientId || !clientSecret) {
-      throw new Error('Missing Cashfree credentials in environment variables');
+serve(async (req) => {
+    // Handle CORS preflight requests
+    if (req.method === "OPTIONS") {
+        return new Response("ok", {
+            headers: corsHeaders,
+        });
     }
-
-    // Initialize Cashfree SDK - try both v5+ and v4 patterns
-    let cashfree: unknown;
     try {
-      // Try v5+ constructor pattern with proper enum handling
-      const env = environment === 'PRODUCTION' ? 'PRODUCTION' : 'SANDBOX';
-      cashfree = new Cashfree(env as never, clientId, clientSecret);
-    } catch {
-      // Fallback to v4 global configuration pattern
-      const CashfreeConfig = Cashfree as unknown as {
-        XClientId: string;
-        XClientSecret: string;
-        XEnvironment: string;
-      };
-      CashfreeConfig.XClientId = clientId;
-      CashfreeConfig.XClientSecret = clientSecret;
-      CashfreeConfig.XEnvironment = environment === 'PRODUCTION'
-        ? 'PRODUCTION'
-        : 'SANDBOX';
-      cashfree = Cashfree;
-    }
+        // Get environment variables with detailed logging
+        const clientId = Deno.env.get("CASHFREE_CLIENT_ID");
+        const clientSecret = Deno.env.get("CASHFREE_CLIENT_SECRET");
+        const environment = Deno.env.get("CASHFREE_ENVIRONMENT") ||
+            "PRODUCTION";
+        if (!clientId || !clientSecret) {
+            console.error("❌ Missing Cashfree credentials");
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error:
+                        "Missing Cashfree credentials in environment variables",
+                    details: {
+                        hasClientId: !!clientId,
+                        hasClientSecret: !!clientSecret,
+                    },
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    status: 500,
+                },
+            );
+        }
+        // Parse request body with error handling
+        let requestBody;
+        try {
+            requestBody = await req.json();
+        } catch (parseError) {
+            console.error("❌ Failed to parse request body:", parseError);
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Invalid JSON in request body",
+                    details: parseError.message,
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    status: 400,
+                },
+            );
+        }
+        const { orderAmount, customerDetails } = requestBody;
+        // Validate required fields
+        if (!orderAmount || !customerDetails) {
+            console.error("❌ Missing required fields:", {
+                hasOrderAmount: !!orderAmount,
+                hasCustomerDetails: !!customerDetails,
+            });
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Order amount and customer details are required",
+                    details: {
+                        hasOrderAmount: !!orderAmount,
+                        hasCustomerDetails: !!customerDetails,
+                    },
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    status: 400,
+                },
+            );
+        }
+        if (
+            !customerDetails.customerEmail || !customerDetails.customerPhone ||
+            !customerDetails.customerName
+        ) {
+            console.error("❌ Missing customer details:", {
+                hasEmail: !!customerDetails.customerEmail,
+                hasPhone: !!customerDetails.customerPhone,
+                hasName: !!customerDetails.customerName,
+            });
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Customer email, phone, and name are required",
+                    details: {
+                        hasEmail: !!customerDetails.customerEmail,
+                        hasPhone: !!customerDetails.customerPhone,
+                        hasName: !!customerDetails.customerName,
+                        receivedData: customerDetails,
+                    },
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    status: 400,
+                },
+            );
+        }
+        // Generate unique order ID
+        const orderId = `order_${Date.now()}_${
+            Math.random().toString(36).substr(2, 9)
+        }`;
+        // Generate valid customer ID (alphanumeric + underscores/hyphens only)
+        const customerId = `customer_${Date.now()}_${
+            Math.random().toString(36).substr(2, 6)
+        }`;
+        // Prepare payment payload
+        const paymentPayload = {
+            order_id: orderId,
+            order_amount: parseFloat(orderAmount),
+            order_currency: "INR",
+            customer_details: {
+                customer_id: customerId,
+                customer_email: customerDetails.customerEmail,
+                customer_phone: customerDetails.customerPhone,
+                customer_name: customerDetails.customerName,
+            },
+        };
+        // Determine API URL based on environment
+        const apiUrl = environment === "PRODUCTION"
+            ? "https://api.cashfree.com/pg/orders"
+            : "https://sandbox.cashfree.com/pg/orders";
+        // Make request to Cashfree API
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-version": "2023-08-01",
+                "x-client-id": clientId,
+                "x-client-secret": clientSecret,
+            },
+            body: JSON.stringify(paymentPayload),
+        });
 
-    if (req.method === 'POST') {
-      // Parse request body
-      const requestBody = await req.json();
-
-      // Validate required fields
-      const {
-        order_amount,
-        order_currency,
-        order_id,
-        customer_details,
-        order_meta,
-      } = requestBody;
-
-      if (!order_amount || !order_currency || !order_id || !customer_details) {
+        let responseData;
+        const responseText = await response.text();
+        try {
+            responseData = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error(
+                "Failed to parse Cashfree response as JSON:",
+                parseError,
+            );
+            throw new Error(
+                `Invalid JSON response from Cashfree: ${responseText}`,
+            );
+        }
+        if (!response.ok) {
+            console.error("Cashfree API error details:", {
+                status: response.status,
+                statusText: response.statusText,
+                responseData: responseData,
+            });
+            // Return detailed error information
+            const errorMessage = responseData?.message ||
+                responseData?.error_description ||
+                responseData?.errors?.[0]?.message ||
+                `HTTP ${response.status}: ${response.statusText}`;
+            throw new Error(`Cashfree API Error: ${errorMessage}`);
+        }
+        // Return success response
         return new Response(
-          JSON.stringify({
-            error:
-              'Missing required fields: order_amount, order_currency, order_id, customer_details',
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
+            JSON.stringify({
+                success: true,
+                orderId: responseData.order_id,
+                paymentSessionId: responseData.payment_session_id,
+                orderAmount: responseData.order_amount,
+                orderCurrency: responseData.order_currency,
+            }),
+            {
+                headers: {
+                    ...corsHeaders,
+                    "Content-Type": "application/json",
+                },
+                status: 200,
+            },
         );
-      }
-
-      // Prepare order request
-      const orderRequest = {
-        order_amount: parseFloat(order_amount.toString()),
-        order_currency: order_currency || 'INR',
-        order_id: order_id,
-        customer_details: {
-          customer_id: customer_details.customer_id,
-          customer_phone: customer_details.customer_phone,
-          customer_email: customer_details.customer_email || undefined,
-          customer_name: customer_details.customer_name || undefined,
-        },
-        order_meta: {
-          return_url: order_meta?.return_url ||
-            `${req.headers.get('origin')}/payment-success?order_id={order_id}`,
-          notify_url: order_meta?.notify_url || undefined,
-          payment_methods: order_meta?.payment_methods || undefined,
-        },
-      };
-
-      // Create order using Cashfree SDK - try both v5+ and v4 method patterns
-      let response: { data?: unknown };
-      try {
-        // Try v5+ instance method
-        response = await (cashfree as unknown as {
-          PGCreateOrder: (req: unknown) => Promise<{ data?: unknown }>;
-        }).PGCreateOrder(orderRequest);
-      } catch {
-        // Try v4 static method with API version
-        response = await (cashfree as unknown as {
-          PGCreateOrder: (
-            version: string,
-            req: unknown,
-          ) => Promise<{ data?: unknown }>;
-        }).PGCreateOrder('2023-08-01', orderRequest);
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: response.data,
-          message: 'Order created successfully',
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
-    } else if (req.method === 'GET') {
-      // Get order by order_id from query parameters
-      const url = new URL(req.url);
-      const orderId = url.searchParams.get('order_id');
-
-      if (!orderId) {
+    } catch (error) {
+        console.error("💥 Payment order creation error details:", {
+            errorName: error?.name,
+            errorMessage: error?.message,
+            errorStack: error?.stack,
+            timestamp: new Date().toISOString(),
+        });
+        // Always return a detailed error response
         return new Response(
-          JSON.stringify({ error: 'Missing order_id parameter' }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
+            JSON.stringify({
+                success: false,
+                error: error?.message || "Unknown error occurred",
+                errorType: error?.name || "UnknownError",
+                timestamp: new Date().toISOString(),
+                debug: true,
+            }),
+            {
+                headers: {
+                    ...corsHeaders,
+                    "Content-Type": "application/json",
+                },
+                status: 500,
+            },
         );
-      }
-
-      // Fetch order using Cashfree SDK - try both v5+ and v4 method patterns
-      let response: { data?: unknown };
-      try {
-        // Try v5+ instance method
-        response = await (cashfree as unknown as {
-          PGFetchOrder: (orderId: string) => Promise<{ data?: unknown }>;
-        }).PGFetchOrder(orderId);
-      } catch {
-        // Try v4 static method with API version
-        response = await (cashfree as unknown as {
-          PGFetchOrder: (
-            version: string,
-            orderId: string,
-          ) => Promise<{ data?: unknown }>;
-        }).PGFetchOrder('2023-08-01', orderId);
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: response.data,
-          message: 'Order fetched successfully',
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
-    } else {
-      return new Response(
-        JSON.stringify({ error: 'Method not allowed' }),
-        {
-          status: 405,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
     }
-  } catch (error) {
-    console.error('Error in pg-create-order function:', error);
-
-    const errorMessage = error instanceof Error
-      ? error.message
-      : 'Internal server error';
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: errorMessage,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
 });

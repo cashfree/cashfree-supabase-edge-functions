@@ -1,146 +1,78 @@
-import { serve } from 'http/server.ts';
-
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // CORS headers for handling cross-origin requests
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
-serve(async (req: Request) => {
+serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: corsHeaders,
+    });
   }
-
   try {
-    // Dynamic import of Cashfree to avoid type issues in Deno
-    const { Cashfree } = await import('cashfree-pg');
-
     // Get environment variables
-    const clientId = Deno.env.get('CASHFREE_CLIENT_ID');
-    const clientSecret = Deno.env.get('CASHFREE_CLIENT_SECRET');
-    const environment = Deno.env.get('CASHFREE_ENVIRONMENT') || 'SANDBOX';
-
+    const clientId = Deno.env.get("CASHFREE_CLIENT_ID");
+    const clientSecret = Deno.env.get("CASHFREE_CLIENT_SECRET");
+    const environment = Deno.env.get("CASHFREE_ENVIRONMENT") || "PRODUCTION";
     if (!clientId || !clientSecret) {
-      throw new Error('Missing Cashfree credentials in environment variables');
+      throw new Error("Missing Cashfree credentials in environment variables");
     }
-
-    // Initialize Cashfree SDK - try both v5+ and v4 patterns
-    let cashfree: unknown;
-    try {
-      // Try v5+ constructor pattern with proper enum handling
-      const env = environment === 'PRODUCTION' ? 'PRODUCTION' : 'SANDBOX';
-      cashfree = new Cashfree(env as never, clientId, clientSecret);
-    } catch {
-      // Fallback to v4 global configuration pattern
-      const CashfreeConfig = Cashfree as unknown as {
-        XClientId: string;
-        XClientSecret: string;
-        XEnvironment: string;
-      };
-      CashfreeConfig.XClientId = clientId;
-      CashfreeConfig.XClientSecret = clientSecret;
-      CashfreeConfig.XEnvironment = environment === 'PRODUCTION'
-        ? 'PRODUCTION'
-        : 'SANDBOX';
-      cashfree = Cashfree;
+    // Parse request body to get order ID
+    const requestBody = await req.json();
+    const { orderId } = requestBody;
+    if (!orderId) {
+      throw new Error("Order ID is required");
     }
-
-    if (req.method === 'GET') {
-      // Get order_id from URL path or query parameters
-      const url = new URL(req.url);
-      const pathParts = url.pathname.split('/').filter(Boolean); // Remove empty strings
-
-      // Expected path: /functions/v1/pg-order-fetch-payments/order_123
-      // pathParts: ['functions', 'v1', 'pg-order-fetch-payments', 'order_123']
-      let orderId = '';
-
-      // Look for order_id in path (should be after 'pg-order-fetch-payments')
-      const functionIndex = pathParts.findIndex((part) =>
-        part === 'pg-order-fetch-payments'
-      );
-      if (functionIndex !== -1 && pathParts[functionIndex + 1]) {
-        orderId = pathParts[functionIndex + 1];
-      }
-
-      // If not found in path, try query parameter
-      if (!orderId) {
-        orderId = url.searchParams.get('order_id') || '';
-      }
-
-      if (!orderId) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error:
-              'Missing order_id. Provide it as path parameter (/pg-order-fetch-payments/order_123) or query parameter (?order_id=order_123)',
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        );
-      }
-
-      // Fetch payments using Cashfree SDK - try both v5+ and v4 method patterns
-      let response: { data?: unknown };
-      try {
-        // Try v5+ instance method
-        response = await (cashfree as unknown as {
-          PGOrderFetchPayments: (
-            orderId: string,
-          ) => Promise<{ data?: unknown }>;
-        }).PGOrderFetchPayments(orderId);
-      } catch {
-        // Try v4 static method with API version
-        response = await (cashfree as unknown as {
-          PGOrderFetchPayments: (
-            version: string,
-            orderId: string,
-          ) => Promise<{ data?: unknown }>;
-        }).PGOrderFetchPayments('2023-08-01', orderId);
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: response.data,
-          message: 'Payments fetched successfully',
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
-    } else {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Method not allowed. Only GET requests are supported.',
-        }),
-        {
-          status: 405,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
+    // Determine API URL based on environment
+    const apiUrl = environment === "PRODUCTION"
+      ? `https://api.cashfree.com/pg/orders/${orderId}/payments`
+      : `https://sandbox.cashfree.com/pg/orders/${orderId}/payments`;
+    // Make request to Cashfree API
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-version": "2023-08-01",
+        "x-client-id": clientId,
+        "x-client-secret": clientSecret,
+      },
+    });
+    const paymentsData = await response.json();
+    if (!response.ok) {
+      console.error("Cashfree API error:", paymentsData);
+      throw new Error(
+        paymentsData.message || "Failed to fetch payment details",
       );
     }
+    // Return success response
+    const responseData = {
+      success: true,
+      payments: paymentsData,
+    };
+    return new Response(JSON.stringify(responseData), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+      status: 200,
+    });
   } catch (error) {
-    console.error('Error in pg-order-fetch-payments function:', error);
-
-    const errorMessage = error instanceof Error
-      ? error.message
-      : 'Internal server error';
-
+    console.error("Payments fetch error:", error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: errorMessage,
+        error: error?.message || "Failed to fetch payment details",
       }),
       {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
   }
