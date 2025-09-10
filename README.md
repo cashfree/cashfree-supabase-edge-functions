@@ -4,21 +4,17 @@ This repository contains Supabase Edge Functions for Cashfree integration.
 
 ## Current Functions
 
-- `pg-create-order`: Cashfree Payment Gateway integration for creating and
-  fetching orders
-- `pg-fetch-order`: Cashfree Payment Gateway integration for fetching order
-  details by order ID
-- `pg-order-fetch-payment`: Fetch specific payment details by order ID and
-  payment ID
-- `pg-order-fetch-payments`: Fetch all payment details for a specific order
+- `pg-create-order`: Used to create orders with Cashfree
+- `pg-get-order`: Used to fetch the order that was created at Cashfree’s using
+  the order_id.
 
 ## Local Development
 
 To run the functions locally, you need to have the Supabase CLI installed:
 
 ```bash
-# Install Supabase CLI
-npm install -g supabase
+# Install Supabase CLI using brew
+brew install supabase/tap/supabase
 
 # Login to Supabase
 supabase login
@@ -27,15 +23,9 @@ supabase login
 supabase start
 
 # Set up environment variables for Cashfree
-supabase secrets set CASHFREE_CLIENT_ID=your_client_id
-supabase secrets set CASHFREE_CLIENT_SECRET=your_client_secret
-supabase secrets set CASHFREE_ENVIRONMENT=SANDBOX
-
-# Run a specific function locally
-supabase functions serve pg-create-order --no-verify-jwt
-supabase functions serve pg-fetch-order --no-verify-jwt
-supabase functions serve pg-order-fetch-payment --no-verify-jwt
-supabase functions serve pg-order-fetch-payments --no-verify-jwt
+supabase secrets set CASHFREE_APP_ID=your_client_id
+supabase secrets set CASHFREE_SECRET_KEY=your_client_secret
+supabase secrets set CASHFREE_ENVIRONMENT=PRODUCTION
 ```
 
 ## Deployment
@@ -43,54 +33,38 @@ supabase functions serve pg-order-fetch-payments --no-verify-jwt
 To deploy the functions to your Supabase project:
 
 ```bash
+# Deploy all functions together
+supabase functions deploy --project-ref your-project-ref
+
 # Deploy a specific function
 supabase functions deploy pg-create-order --project-ref your-project-ref
 supabase functions deploy pg-fetch-order --project-ref your-project-ref
 supabase functions deploy pg-order-fetch-payment --project-ref your-project-ref
 supabase functions deploy pg-order-fetch-payments --project-ref your-project-ref
-
-# Deploy all functions
-supabase functions deploy --project-ref your-project-ref
 ```
 
 ## Testing
 
 You can test deployed functions using cURL:
 
-### Create Order
-
 ```bash
+# Create order
 curl -i --location --request POST 'https://your-project-ref.supabase.co/functions/v1/pg-create-order' \
 --header 'Content-Type: application/json' \
---data '{"order_amount": 100, "order_currency": "INR", "order_id": "test_123", "customer_details": {"customer_id": "cust_123", "customer_phone": "9999999999"}}'
-```
+--data '{
+  "orderAmount": 100,
+  "orderCurrency": "INR",
+  "customerDetails": {
+    "customerId": "cust_123",
+    "customerPhone": "9999999999"
+  },
+  "returnUrl": "https://yourdomain.com/payment/return"
+}'
 
-### Fetch Order
-
-```bash
-curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-fetch-order/test_123'
-```
-
-### Fetch All Payments for Order
-
-```bash
-curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-order-fetch-payments/test_123'
-```
-
-### Fetch Specific Payment
-
-```bash
-curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-order-fetch-payment/test_123/payment_456'
-```
-
-For functions that require authentication, include the authorization header:
-
-```bash
-curl -i --location --request POST 'https://your-project-ref.supabase.co/functions/v1/pg-create-order' \
---header 'Authorization: Bearer your-supabase-jwt' \
+# Get order
+curl -i --location --request POST 'https://your-project-ref.supabase.co/functions/v1/pg-get-order' \
 --header 'Content-Type: application/json' \
---data '{"order_amount": 100, "order_currency": "INR", "order_id": "test_123", "customer_details": {"customer_id": "cust_123", "customer_phone": "9999999999"}}'
-
-curl -i --location --request GET 'https://your-project-ref.supabase.co/functions/v1/pg-fetch-order/test_123' \
---header 'Authorization: Bearer your-supabase-jwt'
+--data '{
+  "order_id": "your_order_id_here"
+}'
 ```

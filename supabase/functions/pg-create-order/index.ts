@@ -1,222 +1,178 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// CORS headers for handling cross-origin requests
+// Supabase Edge Function: pg-create-order
+// Creates an order record and initializes a Cashfree sandbox payment session
+// Uses secrets: CASHFREE_APP_ID, CASHFREE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
         "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-serve(async (req) => {
-    // Handle CORS preflight requests
+Deno.serve(async (req) => {
+    // Handle CORS preflight
     if (req.method === "OPTIONS") {
-        return new Response("ok", {
+        return new Response(null, {
             headers: corsHeaders,
         });
     }
+    const cfAppId = Deno.env.get("CASHFREE_APP_ID");
+    const cfSecret = Deno.env.get("CASHFREE_SECRET_KEY");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const cfEnv = Deno.env.get("CASHFREE_ENVIRONMENT");
+    let cfUrl = "https://api.cashfree.com/pg/orders";
+    if (!!cfEnv && cfEnv.toLowerCase() == "sandbox") {
+        cfUrl = "https://sandbox.cashfree.com/pg/orders";
+    }
+    if (!supabaseUrl || !serviceRoleKey) {
+        return json({
+            success: false,
+            error: "Supabase configuration is missing",
+        }, 500);
+    }
+    if (!cfAppId || !cfSecret) {
+        return json({
+            success: false,
+            error: "Missing Cashfree credentials in environment variables",
+        }, 500);
+    }
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+            persistSession: false,
+        },
+    });
     try {
-        // Get environment variables with detailed logging
-        const clientId = Deno.env.get("CASHFREE_CLIENT_ID");
-        const clientSecret = Deno.env.get("CASHFREE_CLIENT_SECRET");
-        const environment = Deno.env.get("CASHFREE_ENVIRONMENT") ||
-            "PRODUCTION";
-        if (!clientId || !clientSecret) {
-            console.error("❌ Missing Cashfree credentials");
-            return new Response(
-                JSON.stringify({
-                    success: false,
-                    error:
-                        "Missing Cashfree credentials in environment variables",
-                    details: {
-                        hasClientId: !!clientId,
-                        hasClientSecret: !!clientSecret,
-                    },
-                }),
-                {
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json",
-                    },
-                    status: 500,
-                },
-            );
-        }
-        // Parse request body with error handling
-        let requestBody;
-        try {
-            requestBody = await req.json();
-        } catch (parseError) {
-            console.error("❌ Failed to parse request body:", parseError);
-            return new Response(
-                JSON.stringify({
-                    success: false,
-                    error: "Invalid JSON in request body",
-                    details: parseError.message,
-                }),
-                {
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json",
-                    },
-                    status: 400,
-                },
-            );
-        }
-        const { orderAmount, customerDetails } = requestBody;
-        // Validate required fields
-        if (!orderAmount || !customerDetails) {
-            console.error("❌ Missing required fields:", {
-                hasOrderAmount: !!orderAmount,
-                hasCustomerDetails: !!customerDetails,
-            });
-            return new Response(
-                JSON.stringify({
-                    success: false,
-                    error: "Order amount and customer details are required",
-                    details: {
-                        hasOrderAmount: !!orderAmount,
-                        hasCustomerDetails: !!customerDetails,
-                    },
-                }),
-                {
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json",
-                    },
-                    status: 400,
-                },
-            );
-        }
+        const body = await req.json();
         if (
-            !customerDetails.customerEmail || !customerDetails.customerPhone ||
-            !customerDetails.customerName
+            !body || typeof body.orderAmount !== "number" ||
+            body.orderAmount <= 0
         ) {
-            console.error("❌ Missing customer details:", {
-                hasEmail: !!customerDetails.customerEmail,
-                hasPhone: !!customerDetails.customerPhone,
-                hasName: !!customerDetails.customerName,
-            });
-            return new Response(
-                JSON.stringify({
-                    success: false,
-                    error: "Customer email, phone, and name are required",
-                    details: {
-                        hasEmail: !!customerDetails.customerEmail,
-                        hasPhone: !!customerDetails.customerPhone,
-                        hasName: !!customerDetails.customerName,
-                        receivedData: customerDetails,
-                    },
-                }),
-                {
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json",
-                    },
-                    status: 400,
-                },
-            );
+            return json({
+                success: false,
+                error: "Invalid amount",
+            }, 400);
         }
-        // Generate unique order ID
-        const orderId = `order_${Date.now()}_${
-            Math.random().toString(36).substr(2, 9)
-        }`;
-        // Generate valid customer ID (alphanumeric + underscores/hyphens only)
-        const customerId = `customer_${Date.now()}_${
-            Math.random().toString(36).substr(2, 6)
-        }`;
-        // Prepare payment payload
-        const paymentPayload = {
+        const currency = body.orderCurrency || "INR";
+        const returnUrl = body.returnUrl || "";
+        // 1) Create order in DB (service role bypasses RLS)
+        const { data: orderRow, error: orderErr } = await supabase.from(
+            "orders",
+        ).insert({
+            total_amount: body.orderAmount,
+            status: "pending",
+            return_url: returnUrl,
+        }).select("id").single();
+        if (orderErr || !orderRow) {
+            console.error("DB order insert error:", orderErr);
+            return json({
+                success: false,
+                error: "Failed to create order",
+            }, 500);
+        }
+        const orderId = orderRow.id;
+        // 2) Insert order items if provided
+        if (Array.isArray(body.orderItems) && body.orderItems.length > 0) {
+            const items = body.orderItems.map((it) => ({
+                order_id: orderId,
+                product_id: it.product_id,
+                quantity: it.quantity,
+                price: it.price,
+            }));
+            const { error: itemsErr } = await supabase.from("order_items")
+                .insert(items);
+            if (itemsErr) {
+                console.error("DB order_items insert error:", itemsErr);
+                // Not a fatal error for payment, but log it. We continue.
+            }
+        }
+        // 3) Create Cashfree order - Using 2025 API
+        const cfPayload = {
             order_id: orderId,
-            order_amount: parseFloat(orderAmount),
-            order_currency: "INR",
+            order_amount: body.orderAmount,
+            order_currency: currency,
             customer_details: {
-                customer_id: customerId,
-                customer_email: customerDetails.customerEmail,
-                customer_phone: customerDetails.customerPhone,
-                customer_name: customerDetails.customerName,
+                customer_id: body.customerDetails?.customerId || orderId,
+                customer_phone: body.customerDetails?.customerPhone ||
+                    "9999999999",
+                customer_email: body.customerDetails?.customerEmail ||
+                    "test@example.com",
+                customer_name: body.customerDetails?.customerName ||
+                    "Test Customer",
             },
+            order_meta: {
+                return_url: returnUrl
+                    ? `${returnUrl}?order_id=${orderId}`
+                    : undefined,
+            },
+            order_note: "Order from e-commerce checkout",
         };
-        // Determine API URL based on environment
-        const apiUrl = environment === "PRODUCTION"
-            ? "https://api.cashfree.com/pg/orders"
-            : "https://sandbox.cashfree.com/pg/orders";
-        // Make request to Cashfree API
-        const response = await fetch(apiUrl, {
+        const cfRes = await fetch(cfUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-api-version": "2023-08-01",
-                "x-client-id": clientId,
-                "x-client-secret": clientSecret,
+                "x-client-id": cfAppId,
+                "x-client-secret": cfSecret,
+                "x-api-version": "2025-01-01",
             },
-            body: JSON.stringify(paymentPayload),
+            body: JSON.stringify(cfPayload),
         });
-
-        let responseData;
-        const responseText = await response.text();
+        let cfData;
+        const responseText = await cfRes.text();
         try {
-            responseData = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error(
-                "Failed to parse Cashfree response as JSON:",
-                parseError,
-            );
-            throw new Error(
-                `Invalid JSON response from Cashfree: ${responseText}`,
-            );
+            cfData = JSON.parse(responseText);
+        } catch (e) {
+            console.error("Failed to parse Cashfree response as JSON:", e);
+            cfData = {
+                error: "Invalid JSON response",
+                raw: responseText,
+            };
         }
-        if (!response.ok) {
-            console.error("Cashfree API error details:", {
-                status: response.status,
-                statusText: response.statusText,
-                responseData: responseData,
-            });
-            // Return detailed error information
-            const errorMessage = responseData?.message ||
-                responseData?.error_description ||
-                responseData?.errors?.[0]?.message ||
-                `HTTP ${response.status}: ${response.statusText}`;
-            throw new Error(`Cashfree API Error: ${errorMessage}`);
-        }
-        // Return success response
-        return new Response(
-            JSON.stringify({
-                success: true,
-                orderId: responseData.order_id,
-                paymentSessionId: responseData.payment_session_id,
-                orderAmount: responseData.order_amount,
-                orderCurrency: responseData.order_currency,
-            }),
-            {
-                headers: {
-                    ...corsHeaders,
-                    "Content-Type": "application/json",
-                },
-                status: 200,
-            },
-        );
-    } catch (error) {
-        console.error("💥 Payment order creation error details:", {
-            errorName: error?.name,
-            errorMessage: error?.message,
-            errorStack: error?.stack,
-            timestamp: new Date().toISOString(),
-        });
-        // Always return a detailed error response
-        return new Response(
-            JSON.stringify({
+        if (!cfRes.ok) {
+            await supabase.from("orders").update({
+                status: "failed",
+            }).eq("id", orderId);
+            return json({
                 success: false,
-                error: error?.message || "Unknown error occurred",
-                errorType: error?.name || "UnknownError",
-                timestamp: new Date().toISOString(),
-                debug: true,
-            }),
-            {
-                headers: {
-                    ...corsHeaders,
-                    "Content-Type": "application/json",
+                error: cfData?.message || cfData?.error_description ||
+                    `Cashfree API Error: ${cfRes.status} ${cfRes.statusText}`,
+                details: {
+                    status: cfRes.status,
+                    statusText: cfRes.statusText,
+                    response: cfData,
                 },
-                status: 500,
-            },
-        );
+            }, 500);
+        }
+        // Extract response data
+        const cashfreeOrderId = cfData?.order_id;
+        const paymentSessionId = cfData?.payment_session_id;
+        // 4) Update order with payment refs
+        const { error: updErr } = await supabase.from("orders").update({
+            status: "created",
+            cashfree_order_id: cashfreeOrderId || null,
+            payment_session_id: paymentSessionId || null,
+        }).eq("id", orderId);
+        if (updErr) {
+            console.error("DB order update error:", updErr);
+        }
+        return json({
+            success: true,
+            order_id: orderId,
+            cashfree_order_id: cashfreeOrderId,
+            payment_session_id: paymentSessionId,
+        }, 200);
+    } catch (e) {
+        console.error("Unhandled error in pg-create-order:", e);
+        return json({
+            success: false,
+            error: "Unexpected server error",
+        }, 500);
     }
 });
+function json(data, status = 200) {
+    return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+        },
+    });
+}
