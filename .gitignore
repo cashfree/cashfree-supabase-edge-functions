@@ -21,6 +21,7 @@ yarn-error.log*
 
 # Deno cache
 .deno/
+supabase/.temp/
 
 # Supabase
 .supabase/
