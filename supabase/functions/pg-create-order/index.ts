@@ -69,21 +69,6 @@ Deno.serve(async (req) => {
             }, 500);
         }
         const orderId = orderRow.id;
-        // 2) Insert order items if provided
-        if (Array.isArray(body.orderItems) && body.orderItems.length > 0) {
-            const items = body.orderItems.map((it) => ({
-                order_id: orderId,
-                product_id: it.product_id,
-                quantity: it.quantity,
-                price: it.price,
-            }));
-            const { error: itemsErr } = await supabase.from("order_items")
-                .insert(items);
-            if (itemsErr) {
-                console.error("DB order_items insert error:", itemsErr);
-                // Not a fatal error for payment, but log it. We continue.
-            }
-        }
         // 3) Create Cashfree order - Using 2025 API
         const cfPayload = {
             order_id: orderId,
